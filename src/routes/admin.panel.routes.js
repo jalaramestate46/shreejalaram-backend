@@ -26,14 +26,18 @@ function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true });
     return true;
   } catch (error) {
-    if (error.code === "EEXIST") {
+    if (error && error.code === "EEXIST") {
       return true;
     }
     return false;
   }
 }
 
-const uploadsBase = ensureDir(defaultUploadsBase) ? defaultUploadsBase : tmpUploadsBase;
+const uploadsBase = process.env.VERCEL === "1" ? tmpUploadsBase : defaultUploadsBase;
+
+if (process.env.VERCEL !== "1") {
+  ensureDir(uploadsBase);
+}
 
 const homeUploadsDir = path.join(uploadsBase, "home");
 const searchUploadsDir = path.join(uploadsBase, "search");
