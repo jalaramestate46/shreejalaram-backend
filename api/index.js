@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import { app } from "../src/app.js";
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -15,9 +16,6 @@ const envCandidates = [
 for (const envPath of envCandidates) {
   dotenv.config({ path: envPath, override: false });
 }
-
-// Import app after env is loaded
-import { app } from "../src/app.js";
 
 export default app;
 
