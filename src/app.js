@@ -8,6 +8,7 @@ import { env } from "./config/env.js";
 import { apiRouter } from "./routes/index.js";
 import { adminPanelRouter } from "./routes/admin.panel.routes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware.js";
+import { ensureDbConnected } from "./middlewares/db.middleware.js";
 import { globalLimiter, securityMiddleware } from "./middlewares/security.middleware.js";
 import { getRobotsTxt, getSitemapXml } from "./controllers/seo.controller.js";
 
@@ -41,6 +42,10 @@ app.use((req, res, next) => {
 
   return next();
 });
+
+// Ensure database is connected
+app.use(ensureDbConnected);
+
 
 app.get("/robots.txt", getRobotsTxt);
 app.get("/sitemap.xml", getSitemapXml);
