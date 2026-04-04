@@ -2,6 +2,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { env } from "./config/env.js";
@@ -15,7 +16,12 @@ import { getRobotsTxt, getSitemapXml } from "./controllers/seo.controller.js";
 export const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsDir = path.resolve(__dirname, "../uploads");
+const isVercel = Boolean(process.env.VERCEL);
+const uploadsDir = env.uploadsDir
+  ? path.resolve(env.uploadsDir)
+  : isVercel
+  ? path.resolve(os.tmpdir(), "uploads")
+  : path.resolve(__dirname, "../uploads");
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });

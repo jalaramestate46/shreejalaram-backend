@@ -35,4 +35,5 @@ export const env = {
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || "default-refresh-secret",
   accessTokenTtl: process.env.ACCESS_TOKEN_TTL || "15m",
   refreshTokenTtl: process.env.REFRESH_TOKEN_TTL || "30d",
+  uploadsDir: process.env.UPLOADS_DIR || "",
 };
