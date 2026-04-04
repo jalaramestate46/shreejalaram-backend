@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import multer from "multer";
 import { fileURLToPath } from "url";
@@ -16,40 +17,42 @@ export const adminPanelRouter = Router();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const homeUploadsDir = path.resolve(__dirname, "../../uploads/home");
-const searchUploadsDir = path.resolve(__dirname, "../../uploads/search");
-const aboutUploadsDir = path.resolve(__dirname, "../../uploads/about");
-const aboutVideoUploadsDir = path.resolve(__dirname, "../../uploads/about/videos");
-const projectUploadsDir = path.resolve(__dirname, "../../uploads/projects");
-const projectBrochureUploadsDir = path.resolve(__dirname, "../../uploads/projects/brochures");
-const projectVideoUploadsDir = path.resolve(__dirname, "../../uploads/projects/videos");
 
-if (!fs.existsSync(homeUploadsDir)) {
-  fs.mkdirSync(homeUploadsDir, { recursive: true });
+const defaultUploadsBase = path.resolve(__dirname, "../../uploads");
+const tmpUploadsBase = path.join(os.tmpdir(), "uploads");
+
+function ensureDir(dir) {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      return true;
+    }
+    return false;
+  }
 }
 
-if (!fs.existsSync(searchUploadsDir)) {
-  fs.mkdirSync(searchUploadsDir, { recursive: true });
-}
+const uploadsBase = ensureDir(defaultUploadsBase) ? defaultUploadsBase : tmpUploadsBase;
 
-if (!fs.existsSync(aboutUploadsDir)) {
-  fs.mkdirSync(aboutUploadsDir, { recursive: true });
-}
+const homeUploadsDir = path.join(uploadsBase, "home");
+const searchUploadsDir = path.join(uploadsBase, "search");
+const aboutUploadsDir = path.join(uploadsBase, "about");
+const aboutVideoUploadsDir = path.join(uploadsBase, "about/videos");
+const projectUploadsDir = path.join(uploadsBase, "projects");
+const projectBrochureUploadsDir = path.join(uploadsBase, "projects/brochures");
+const projectVideoUploadsDir = path.join(uploadsBase, "projects/videos");
 
-if (!fs.existsSync(aboutVideoUploadsDir)) {
-  fs.mkdirSync(aboutVideoUploadsDir, { recursive: true });
-}
-
-if (!fs.existsSync(projectUploadsDir)) {
-  fs.mkdirSync(projectUploadsDir, { recursive: true });
-}
-
-if (!fs.existsSync(projectBrochureUploadsDir)) {
-  fs.mkdirSync(projectBrochureUploadsDir, { recursive: true });
-}
-
-if (!fs.existsSync(projectVideoUploadsDir)) {
-  fs.mkdirSync(projectVideoUploadsDir, { recursive: true });
+for (const dir of [
+  homeUploadsDir,
+  searchUploadsDir,
+  aboutUploadsDir,
+  aboutVideoUploadsDir,
+  projectUploadsDir,
+  projectBrochureUploadsDir,
+  projectVideoUploadsDir,
+]) {
+  ensureDir(dir);
 }
 
 const homeImageUpload = multer({
