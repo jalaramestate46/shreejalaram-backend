@@ -1,7 +1,7 @@
 import { connectDB } from "../config/db.js";
 
 let dbConnected = false;
-const PUBLIC_ROUTES = ["/health", "/robots.txt", "/sitemap.xml"];
+const PUBLIC_ROUTES = ["/", "/health", "/robots.txt", "/sitemap.xml", "/favicon.ico", "/favicon.png"];
 
 export const ensureDbConnected = (req, res, next) => {
   // Skip DB connection for public routes
