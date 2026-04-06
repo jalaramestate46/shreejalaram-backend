@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import { Property } from "../models/Property.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/apiError.js";
@@ -113,7 +112,7 @@ export const deleteProperty = asyncHandler(async (req, res) => {
 export const toggleFavoriteProperty = asyncHandler(async (req, res) => {
   const propertyId = req.params.id;
 
-  if (!mongoose.Types.ObjectId.isValid(propertyId)) {
+  if (!propertyId) {
     throw new ApiError(400, "Invalid property id");
   }
 

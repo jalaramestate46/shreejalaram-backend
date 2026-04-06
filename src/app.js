@@ -55,6 +55,9 @@ app.use(ensureDbConnected);
 
 app.get("/robots.txt", getRobotsTxt);
 app.get("/sitemap.xml", getSitemapXml);
+app.get(["/favicon.ico", "/favicon.png"], (_req, res) => {
+  res.status(204).end();
+});
 
 app.get("/", (_req, res) => {
   res.json({

@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "Express + MongoDB backend for Shree Jalaram Estate frontend",
+  "description": "Express + Supabase/PostgreSQL backend for Shree Jalaram Estate frontend",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
@@ -10,7 +10,8 @@
   },
   "keywords": [
     "express",
-    "mongodb",
+    "postgresql",
+    "supabase",
     "seo",
     "real-estate"
   ],
@@ -29,9 +30,9 @@
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.3.3",
     "morgan": "^1.10.1",
     "multer": "^2.1.1",
+    "pg": "^8.16.3",
     "slugify": "^1.6.8",
     "zod": "^4.3.6"
   },

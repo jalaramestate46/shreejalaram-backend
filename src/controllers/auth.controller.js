@@ -1,5 +1,4 @@
 import bcrypt from "bcryptjs";
-import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/apiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -153,11 +152,9 @@ export const getUsers = asyncHandler(async (_req, res) => {
 export const updateUser = asyncHandler(async (req, res) => {
   const idOrUsername = req.params.id;
 
-  const filter = mongoose.Types.ObjectId.isValid(idOrUsername)
-    ? { _id: idOrUsername }
-    : { username: idOrUsername };
-
-  const user = await User.findOne(filter);
+  const user = await User.findOne({
+    $or: [{ _id: idOrUsername }, { username: idOrUsername }],
+  });
 
   if (!user) {
     throw new ApiError(404, "User not found");

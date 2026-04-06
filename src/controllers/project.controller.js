@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import slugify from "slugify";
 import { Project } from "../models/Project.js";
 import { ApiError } from "../utils/apiError.js";
@@ -13,9 +12,9 @@ export const getProjects = asyncHandler(async (_req, res) => {
 export const getProjectBySlugOrId = asyncHandler(async (req, res) => {
   const value = req.params.slugOrId;
 
-  const filter = mongoose.Types.ObjectId.isValid(value)
-    ? { _id: value }
-    : { slug: value.toLowerCase() };
+  const filter = {
+    $or: [{ _id: value }, { slug: value.toLowerCase() }],
+  };
 
   const project = await Project.findOne(filter).lean();
 
