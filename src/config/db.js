@@ -1,30 +1,28 @@
-import mysql from "mysql2/promise";
+import { Pool } from "pg";
 import { env } from "./env.js";
 
 const globalPool = globalThis;
-const cachedConnection = globalPool.__jalaramMysqlPool ?? (globalPool.__jalaramMysqlPool = { pool: null, ready: null });
+const cachedConnection = globalPool.__jalaramPgPool ?? (globalPool.__jalaramPgPool = { pool: null, ready: null });
 
 function createPool() {
-  if (!env.mysqlUrl) {
+  if (!env.supabaseDbUrl) {
     throw new Error(
-      "Database URL is not set. Add MYSQL_URL or DATABASE_URL in your environment."
+      "Database URL is not set. Add SUPABASE_DB_URL, DATABASE_URL, or POSTGRES_URL in your environment."
     );
   }
 
-  if (/^https?:\/\//i.test(env.mysqlUrl)) {
+  if (/^https?:\/\//i.test(env.supabaseDbUrl)) {
     throw new Error(
-      "Database URL is invalid. Use a MySQL connection string such as mysql://user:password@host:3306/database."
+      "Database URL is invalid. Use the Supabase Postgres connection string, not the Supabase project https URL."
     );
   }
 
-  return mysql.createPool({
-    uri: env.mysqlUrl,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    timezone: "Z",
-    namedPlaceholders: false,
-    decimalNumbers: true,
+  const needsSsl = env.nodeEnv === "production" || /supabase\.co/i.test(env.supabaseDbUrl);
+
+  return new Pool({
+    connectionString: env.supabaseDbUrl,
+    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+    max: 10,
   });
 }
 
@@ -51,12 +49,7 @@ export async function connectDB() {
 
 export async function query(text, params = []) {
   const pool = await connectDB();
-  const [rows, meta] = await pool.query(text, params);
-  return {
-    rows: Array.isArray(rows) ? rows : [],
-    rowCount: typeof meta?.affectedRows === "number" ? meta.affectedRows : Array.isArray(rows) ? rows.length : 0,
-    insertId: meta?.insertId ?? null,
-  };
+  return pool.query(text, params);
 }
 
 export function getPool() {

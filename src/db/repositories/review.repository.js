@@ -39,7 +39,7 @@ function normalizeReviewInput(data = {}) {
 async function fetchReviews(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, REVIEW_COLUMNS, params);
-  const { rows } = await query(`select ${REVIEW_SELECT} from reviews r ${where ? `where ${where}` : ""}`, params);
+  const { rows } = await query(`select ${REVIEW_SELECT} from public.reviews r ${where ? `where ${where}` : ""}`, params);
   return rows;
 }
 
@@ -50,28 +50,26 @@ export const Review = {
   async create(data = {}) {
     if (Array.isArray(data)) {
       const created = [];
-      for (const item of data) {
-        created.push(await Review.create(item));
-      }
+      for (const item of data) created.push(await Review.create(item));
       return created;
     }
 
     const payload = normalizeReviewInput(data);
-    await query(
+    const result = await query(
       `
-        insert into reviews (id, name, phone, rating, testimonial, image)
-        values (?, ?, ?, ?, ?, ?)
+        insert into public.reviews (id, name, phone, rating, testimonial, image)
+        values ($1, $2, $3, $4, $5, $6)
+        returning ${REVIEW_SELECT}
       `,
       [data.id || data._id || randomUUID(), payload.name, payload.phone, payload.rating, payload.testimonial, payload.image]
     );
 
-    const rows = await fetchReviews({ _id: data.id || data._id || undefined, name: payload.name, phone: payload.phone });
-    return rows[0] || null;
+    return result.rows[0] || null;
   },
   async deleteMany(filter = {}) {
     const params = [];
     const where = buildPredicate(filter, REVIEW_COLUMNS, params);
-    const result = await query(`delete from reviews ${where ? `where ${where}` : ""}`, params);
+    const result = await query(`delete from public.reviews ${where ? `where ${where}` : ""}`, params);
     return { deletedCount: result.rowCount };
   },
 };

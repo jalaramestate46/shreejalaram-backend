@@ -126,25 +126,19 @@ function buildPredicate(filter, columnMap, params) {
     }
 
     if (value instanceof RegExp) {
-      params.push(value.source.toLowerCase());
-      parts.push(`instr(lower(coalesce(${column}, '')), ?) > 0`);
+      params.push(value.source);
+      parts.push(`position(lower($${params.length}::text) in lower(coalesce(${column}::text, ''))) > 0`);
       continue;
     }
 
     if (Array.isArray(value)) {
-      if (value.length === 0) {
-        parts.push("1 = 0");
-        continue;
-      }
-
-      const placeholders = value.map(() => "?").join(", ");
-      params.push(...value);
-      parts.push(`${column} in (${placeholders})`);
+      params.push(value);
+      parts.push(`${column} = any($${params.length})`);
       continue;
     }
 
     params.push(value);
-    parts.push(`${column} = ?`);
+    parts.push(`${column} = $${params.length}`);
   }
 
   return parts.join(" and ");
@@ -255,26 +249,6 @@ export function stripNullish(source) {
 
 export function toArray(value) {
   return ensureArray(value);
-}
-
-export function parseJsonField(value, fallback) {
-  if (value == null || value === "") {
-    return fallback;
-  }
-
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-}
-
-export function stringifyJson(value, fallback = null) {
-  return JSON.stringify(value ?? fallback);
 }
 
 export { applyProjection, applySort, buildPredicate, parseSelect };

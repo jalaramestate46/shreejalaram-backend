@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import slugify from "slugify";
 import { query } from "../../config/db.js";
-import { buildPredicate, createQuery, parseJsonField, stringifyJson } from "./_sql.js";
+import { buildPredicate, createQuery } from "./_sql.js";
 
 const PROJECT_COLUMNS = {
   _id: "p.id",
@@ -74,23 +74,14 @@ function normalizeProjectCreate(data = {}) {
 }
 
 function mapProject(row) {
-  if (!row) {
-    return null;
-  }
-
-  return {
-    ...row,
-    images: parseJsonField(row.images, []),
-    overview: parseJsonField(row.overview, {}),
-    amenities: parseJsonField(row.amenities, []),
-    faqs: parseJsonField(row.faqs, []),
-  };
+  if (!row) return null;
+  return { ...row, images: row.images || [], overview: row.overview || {}, amenities: row.amenities || [], faqs: row.faqs || [] };
 }
 
 async function fetchProjects(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, PROJECT_COLUMNS, params);
-  const { rows } = await query(`select ${PROJECT_SELECT} from projects p ${where ? `where ${where}` : ""}`, params);
+  const { rows } = await query(`select ${PROJECT_SELECT} from public.projects p ${where ? `where ${where}` : ""}`, params);
   return rows.map(mapProject);
 }
 
@@ -106,202 +97,92 @@ async function fetchProjectBySlug(slug) {
 
 function normalizeUpdatePayload(data = {}) {
   const update = {};
-
-  if (data.title !== undefined) {
-    update.title = String(data.title || "").trim();
-  }
-
-  if (data.slug !== undefined) {
-    update.slug = String(data.slug || "").trim();
-  }
-
-  if (data.description !== undefined) {
-    update.description = String(data.description || "").trim();
-  }
-
-  if (data.status !== undefined) {
-    update.status = data.status;
-  }
-
-  if (data.location !== undefined) {
-    update.location = String(data.location || "").trim();
-  }
-
-  if (data.address !== undefined) {
-    update.address = String(data.address || "").trim();
-  }
-
-  if (data.projectType !== undefined || data.project_type !== undefined) {
-    update.project_type = String(data.projectType || data.project_type || "").trim();
-  }
-
-  if (data.developedBy !== undefined || data.developed_by !== undefined) {
-    update.developed_by = String(data.developedBy || data.developed_by || "").trim();
-  }
-
-  if (data.images !== undefined) {
-    update.images = Array.isArray(data.images) ? data.images : [];
-  }
-
-  if (data.brochureUrl !== undefined || data.brochure_url !== undefined) {
-    update.brochure_url = String(data.brochureUrl || data.brochure_url || "").trim();
-  }
-
-  if (data.overview !== undefined) {
-    update.overview = data.overview && typeof data.overview === "object" ? data.overview : {};
-  }
-
-  if (data.amenities !== undefined) {
-    update.amenities = Array.isArray(data.amenities) ? data.amenities : [];
-  }
-
-  if (data.locationDescription !== undefined || data.location_description !== undefined) {
-    update.location_description = String(data.locationDescription || data.location_description || "").trim();
-  }
-
-  if (data.virtualTourUrl !== undefined || data.virtual_tour_url !== undefined) {
-    update.virtual_tour_url = String(data.virtualTourUrl || data.virtual_tour_url || "").trim();
-  }
-
-  if (data.virtualTourTitle !== undefined || data.virtual_tour_title !== undefined) {
-    update.virtual_tour_title = String(data.virtualTourTitle || data.virtual_tour_title || "").trim();
-  }
-
-  if (data.virtualTourDescription !== undefined || data.virtual_tour_description !== undefined) {
-    update.virtual_tour_description = String(data.virtualTourDescription || data.virtual_tour_description || "").trim();
-  }
-
-  if (data.faqs !== undefined) {
-    update.faqs = Array.isArray(data.faqs) ? data.faqs : [];
-  }
-
-  if (data.contactTitle !== undefined || data.contact_title !== undefined) {
-    update.contact_title = String(data.contactTitle || data.contact_title || "").trim();
-  }
-
-  if (data.contactNote !== undefined || data.contact_note !== undefined) {
-    update.contact_note = String(data.contactNote || data.contact_note || "").trim();
-  }
-
-  if (data.contactButtonLabel !== undefined || data.contact_button_label !== undefined) {
-    update.contact_button_label = String(data.contactButtonLabel || data.contact_button_label || "").trim();
-  }
-
-  if (update.title && !update.slug) {
-    update.slug = slugify(update.title, { lower: true, strict: true });
-  }
-
+  if (data.title !== undefined) update.title = String(data.title || "").trim();
+  if (data.slug !== undefined) update.slug = String(data.slug || "").trim();
+  if (data.description !== undefined) update.description = String(data.description || "").trim();
+  if (data.status !== undefined) update.status = data.status;
+  if (data.location !== undefined) update.location = String(data.location || "").trim();
+  if (data.address !== undefined) update.address = String(data.address || "").trim();
+  if (data.projectType !== undefined || data.project_type !== undefined) update.project_type = String(data.projectType || data.project_type || "").trim();
+  if (data.developedBy !== undefined || data.developed_by !== undefined) update.developed_by = String(data.developedBy || data.developed_by || "").trim();
+  if (data.images !== undefined) update.images = Array.isArray(data.images) ? data.images : [];
+  if (data.brochureUrl !== undefined || data.brochure_url !== undefined) update.brochure_url = String(data.brochureUrl || data.brochure_url || "").trim();
+  if (data.overview !== undefined) update.overview = data.overview && typeof data.overview === "object" ? data.overview : {};
+  if (data.amenities !== undefined) update.amenities = Array.isArray(data.amenities) ? data.amenities : [];
+  if (data.locationDescription !== undefined || data.location_description !== undefined) update.location_description = String(data.locationDescription || data.location_description || "").trim();
+  if (data.virtualTourUrl !== undefined || data.virtual_tour_url !== undefined) update.virtual_tour_url = String(data.virtualTourUrl || data.virtual_tour_url || "").trim();
+  if (data.virtualTourTitle !== undefined || data.virtual_tour_title !== undefined) update.virtual_tour_title = String(data.virtualTourTitle || data.virtual_tour_title || "").trim();
+  if (data.virtualTourDescription !== undefined || data.virtual_tour_description !== undefined) update.virtual_tour_description = String(data.virtualTourDescription || data.virtual_tour_description || "").trim();
+  if (data.faqs !== undefined) update.faqs = Array.isArray(data.faqs) ? data.faqs : [];
+  if (data.contactTitle !== undefined || data.contact_title !== undefined) update.contact_title = String(data.contactTitle || data.contact_title || "").trim();
+  if (data.contactNote !== undefined || data.contact_note !== undefined) update.contact_note = String(data.contactNote || data.contact_note || "").trim();
+  if (data.contactButtonLabel !== undefined || data.contact_button_label !== undefined) update.contact_button_label = String(data.contactButtonLabel || data.contact_button_label || "").trim();
+  if (update.title && !update.slug) update.slug = slugify(update.title, { lower: true, strict: true });
   return update;
 }
 
 async function updateProject(id, payload = {}) {
   const update = normalizeUpdatePayload(payload);
   const fields = [];
-  const values = [];
+  const values = [id];
 
   for (const [field, value] of Object.entries(update)) {
-    fields.push(`${field} = ?`);
-    values.push(["images", "overview", "amenities", "faqs"].includes(field) ? stringifyJson(value, Array.isArray(value) ? [] : {}) : value);
+    values.push(value);
+    fields.push(`${field} = $${values.length}`);
   }
 
-  if (fields.length === 0) {
-    return fetchProjectById(id);
-  }
+  if (fields.length === 0) return fetchProjectById(id);
 
   const result = await query(
     `
-      update projects
-      set ${fields.join(", ")}, updated_at = utc_timestamp()
-      where id = ?
+      update public.projects
+      set ${fields.join(", ")}, updated_at = timezone('utc', now())
+      where id = $1
+      returning ${PROJECT_SELECT}
     `,
-    [...values, id]
+    values
   );
 
-  if (result.rowCount === 0) {
-    return null;
-  }
-
-  return fetchProjectById(id);
+  return mapProject(result.rows[0] || null);
 }
 
 export const Project = {
-  find(filter = {}) {
-    return createQuery(async () => fetchProjects(filter));
-  },
-  findOne(filter = {}) {
-    return createQuery(async () => {
-      const rows = await fetchProjects(filter);
-      return rows[0] || null;
-    });
-  },
-  findById(id) {
-    return createQuery(async () => fetchProjectById(id));
-  },
-  findBySlug(slug) {
-    return createQuery(async () => fetchProjectBySlug(slug));
-  },
+  find(filter = {}) { return createQuery(async () => fetchProjects(filter)); },
+  findOne(filter = {}) { return createQuery(async () => (await fetchProjects(filter))[0] || null); },
+  findById(id) { return createQuery(async () => fetchProjectById(id)); },
+  findBySlug(slug) { return createQuery(async () => fetchProjectBySlug(slug)); },
   async create(data = {}) {
     if (Array.isArray(data)) {
       const created = [];
-      for (const item of data) {
-        created.push(await Project.create(item));
-      }
+      for (const item of data) created.push(await Project.create(item));
       return created;
     }
 
     const payload = normalizeProjectCreate(data);
-    await query(
+    const result = await query(
       `
-        insert into projects (
+        insert into public.projects (
           id, title, slug, description, status, location, address, project_type, developed_by,
           images, brochure_url, overview, amenities, location_description,
           virtual_tour_url, virtual_tour_title, virtual_tour_description, faqs,
           contact_title, contact_note, contact_button_label
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        returning ${PROJECT_SELECT}
       `,
-      [
-        payload.id,
-        payload.title,
-        payload.slug,
-        payload.description,
-        payload.status,
-        payload.location,
-        payload.address,
-        payload.project_type,
-        payload.developed_by,
-        stringifyJson(payload.images, []),
-        payload.brochure_url,
-        stringifyJson(payload.overview, {}),
-        stringifyJson(payload.amenities, []),
-        payload.location_description,
-        payload.virtual_tour_url,
-        payload.virtual_tour_title,
-        payload.virtual_tour_description,
-        stringifyJson(payload.faqs, []),
-        payload.contact_title,
-        payload.contact_note,
-        payload.contact_button_label,
-      ]
+      [payload.id, payload.title, payload.slug, payload.description, payload.status, payload.location, payload.address, payload.project_type, payload.developed_by, payload.images, payload.brochure_url, payload.overview, payload.amenities, payload.location_description, payload.virtual_tour_url, payload.virtual_tour_title, payload.virtual_tour_description, payload.faqs, payload.contact_title, payload.contact_note, payload.contact_button_label]
     );
 
-    return fetchProjectById(payload.id);
+    return mapProject(result.rows[0] || null);
   },
-  findByIdAndUpdate(id, payload = {}) {
-    return updateProject(id, payload);
-  },
+  findByIdAndUpdate(id, payload = {}) { return updateProject(id, payload); },
   async findByIdAndDelete(id) {
-    const existing = await fetchProjectById(id);
-    if (!existing) {
-      return null;
-    }
-
-    await query(`delete from projects where id = ?`, [id]);
-    return { _id: existing._id };
+    const result = await query(`delete from public.projects where id = $1 returning id as "_id"`, [id]);
+    return result.rows[0] ? { _id: result.rows[0]._id } : null;
   },
   async deleteMany(filter = {}) {
     const params = [];
     const where = buildPredicate(filter, PROJECT_COLUMNS, params);
-    const result = await query(`delete from projects ${where ? `where ${where}` : ""}`, params);
+    const result = await query(`delete from public.projects ${where ? `where ${where}` : ""}`, params);
     return { deletedCount: result.rowCount };
   },
 };

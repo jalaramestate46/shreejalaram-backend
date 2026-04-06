@@ -45,7 +45,7 @@ function normalizeInquiryInput(data = {}) {
 async function fetchInquiries(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, INQUIRY_COLUMNS, params);
-  const { rows } = await query(`select ${INQUIRY_SELECT} from inquiries i ${where ? `where ${where}` : ""}`, params);
+  const { rows } = await query(`select ${INQUIRY_SELECT} from public.inquiries i ${where ? `where ${where}` : ""}`, params);
   return rows;
 }
 
@@ -55,30 +55,25 @@ export const Inquiry = {
   },
   async create(data = {}) {
     const payload = normalizeInquiryInput(data);
-    await query(
+    const result = await query(
       `
-        insert into inquiries (id, type, name, mobile, email, message, consent, project_id)
-        values (?, ?, ?, ?, ?, ?, ?, ?)
+        insert into public.inquiries (id, type, name, mobile, email, message, consent, project_id)
+        values ($1, $2, $3, $4, $5, $6, $7, $8)
+        returning ${INQUIRY_SELECT}
       `,
       [data.id || data._id || randomUUID(), payload.type, payload.name, payload.mobile, payload.email, payload.message, payload.consent, payload.project_id]
     );
 
-    const rows = await fetchInquiries({ _id: data.id || data._id || undefined, mobile: payload.mobile, email: payload.email });
-    return rows[0] || null;
+    return result.rows[0] || null;
   },
   async findByIdAndDelete(id) {
-    const existing = (await fetchInquiries({ _id: id }))[0] || null;
-    if (!existing) {
-      return null;
-    }
-
-    await query(`delete from inquiries where id = ?`, [id]);
-    return { _id: existing._id };
+    const result = await query(`delete from public.inquiries where id = $1 returning id as "_id"`, [id]);
+    return result.rows[0] ? { _id: result.rows[0]._id } : null;
   },
   async deleteMany(filter = {}) {
     const params = [];
     const where = buildPredicate(filter, INQUIRY_COLUMNS, params);
-    const result = await query(`delete from inquiries ${where ? `where ${where}` : ""}`, params);
+    const result = await query(`delete from public.inquiries ${where ? `where ${where}` : ""}`, params);
     return { deletedCount: result.rowCount };
   },
 };

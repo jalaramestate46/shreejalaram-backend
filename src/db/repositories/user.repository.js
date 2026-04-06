@@ -17,7 +17,7 @@ const USER_COLUMNS = {
   updatedAt: "u.updated_at",
 };
 
-const USER_BASE_SELECT = `
+const USER_SELECT = `
   u.id as "_id",
   u.id as id,
   u.username,
@@ -29,7 +29,8 @@ const USER_BASE_SELECT = `
   u.role,
   u.refresh_token as "refreshToken",
   u.created_at as "createdAt",
-  u.updated_at as "updatedAt"
+  u.updated_at as "updatedAt",
+  coalesce(array_agg(uf.property_id) filter (where uf.property_id is not null), '{}'::text[]) as favorites
 `;
 
 const FAVORITE_PROPERTY_SELECT = `
@@ -79,31 +80,17 @@ async function fetchUsers(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, USER_COLUMNS, params);
   const sql = `
-    select ${USER_BASE_SELECT}
-    from users u
+    select ${USER_SELECT}
+    from public.users u
+    left join public.user_favorites uf on uf.user_id = u.id
     ${where ? `where ${where}` : ""}
+    group by u.id
   `;
 
   const { rows } = await query(sql, params);
-  if (rows.length === 0) {
-    return [];
-  }
-
-  const favoriteRows = await query(
-    `select user_id, property_id from user_favorites where user_id in (${rows.map(() => "?").join(", ")})`,
-    rows.map((row) => row.id)
-  );
-  const favoritesMap = new Map();
-
-  for (const favoriteRow of favoriteRows.rows) {
-    const list = favoritesMap.get(favoriteRow.user_id) || [];
-    list.push(favoriteRow.property_id);
-    favoritesMap.set(favoriteRow.user_id, list);
-  }
-
   return rows.map((row) => ({
     ...row,
-    favorites: normalizeFavoriteIds(favoritesMap.get(row.id) || []),
+    favorites: normalizeFavoriteIds(row.favorites),
   }));
 }
 
@@ -121,10 +108,10 @@ async function fetchFavoriteProperties(propertyIds) {
   const { rows } = await query(
     `
       select ${FAVORITE_PROPERTY_SELECT}
-      from properties p
-      where p.id in (${ids.map(() => "?").join(", ")})
+      from public.properties p
+      where p.id = any($1)
     `,
-    ids
+    [ids]
   );
 
   const propertyMap = new Map(rows.map((row) => [row._id, row]));
@@ -165,22 +152,19 @@ async function populateUsers(records, populateSpecs) {
 
 async function syncFavorites(userId, favorites) {
   const nextIds = normalizeFavoriteIds(favorites);
-  const currentRows = await query(`select property_id from user_favorites where user_id = ?`, [userId]);
+  const currentRows = await query(`select property_id from public.user_favorites where user_id = $1`, [userId]);
   const currentIds = currentRows.rows.map((row) => row.property_id);
 
   const toRemove = currentIds.filter((id) => !nextIds.includes(id));
   const toAdd = nextIds.filter((id) => !currentIds.includes(id));
 
   if (toRemove.length > 0) {
-    await query(
-      `delete from user_favorites where user_id = ? and property_id in (${toRemove.map(() => "?").join(", ")})`,
-      [userId, ...toRemove]
-    );
+    await query(`delete from public.user_favorites where user_id = $1 and property_id = any($2)`, [userId, toRemove]);
   }
 
   for (const propertyId of toAdd) {
     await query(
-      `insert ignore into user_favorites (user_id, property_id) values (?, ?)`,
+      `insert into public.user_favorites (user_id, property_id) values ($1, $2) on conflict do nothing`,
       [userId, propertyId]
     );
   }
@@ -192,19 +176,33 @@ async function saveUserRecord(record) {
   const payload = normalizeUserInput(record);
   const result = await query(
     `
-      update users
-      set username = ?,
-          full_name = ?,
-          email = ?,
-          mobile = ?,
-          avatar = ?,
-          password_hash = ?,
-          role = ?,
-          refresh_token = ?,
-          updated_at = utc_timestamp()
-      where id = ?
+      update public.users
+      set username = $2,
+          full_name = $3,
+          email = $4,
+          mobile = $5,
+          avatar = $6,
+          password_hash = $7,
+          role = $8,
+          refresh_token = $9,
+          updated_at = timezone('utc', now())
+      where id = $1
+      returning
+        id as "_id",
+        id,
+        username,
+        full_name as "fullName",
+        email,
+        mobile,
+        avatar,
+        password_hash as "passwordHash",
+        role,
+        refresh_token as "refreshToken",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
     `,
     [
+      payload.id,
       payload.username,
       payload.full_name,
       payload.email,
@@ -213,11 +211,10 @@ async function saveUserRecord(record) {
       payload.password_hash,
       payload.role,
       payload.refresh_token,
-      payload.id,
     ]
   );
 
-  const updated = result.rowCount > 0 ? await fetchUserById(payload.id) : null;
+  const updated = result.rows[0] || null;
   if (!updated) {
     return null;
   }
@@ -239,20 +236,17 @@ async function deleteUsers(filter = {}) {
   const where = buildPredicate(filter, USER_COLUMNS, params);
 
   if (!where) {
-    await query(`delete from user_favorites`);
-    const result = await query(`delete from users`);
+    await query(`delete from public.user_favorites`);
+    const result = await query(`delete from public.users`);
     return { deletedCount: result.rowCount };
   }
 
-  const ids = await query(`select id from users u where ${where}`, params);
+  const ids = await query(`select id from public.users u where ${where}`, params);
   if (ids.rows.length > 0) {
-    await query(
-      `delete from user_favorites where user_id in (${ids.rows.map(() => "?").join(", ")})`,
-      ids.rows.map((row) => row.id)
-    );
+    await query(`delete from public.user_favorites where user_id = any($1)`, [ids.rows.map((row) => row.id)]);
   }
 
-  const result = await query(`delete from users u where ${where}`, params);
+  const result = await query(`delete from public.users u where ${where}`, params);
   return { deletedCount: result.rowCount };
 }
 
@@ -263,10 +257,7 @@ async function updateUsers(filter = {}, update = {}) {
       return { matchedCount: 0, modifiedCount: 0 };
     }
 
-    const result = await query(
-      `delete from user_favorites where property_id in (${propertyIds.map(() => "?").join(", ")})`,
-      propertyIds
-    );
+    const result = await query(`delete from public.user_favorites where property_id = any($1)`, [propertyIds]);
     return { matchedCount: result.rowCount, modifiedCount: result.rowCount };
   }
 
@@ -280,7 +271,7 @@ async function updateUsers(filter = {}, update = {}) {
     }
 
     params.push(value);
-    set.push(`${fieldName} = ?`);
+    set.push(`${fieldName} = $${params.length}`);
   }
 
   if (update.$set) {
@@ -300,7 +291,7 @@ async function updateUsers(filter = {}, update = {}) {
   }
 
   const result = await query(
-    `update users u set ${set.join(", ")}, updated_at = utc_timestamp() ${where ? `where ${where}` : ""}`,
+    `update public.users u set ${set.join(", ")}, updated_at = timezone('utc', now()) ${where ? `where ${where}` : ""}`,
     params
   );
 
@@ -319,11 +310,24 @@ export const User = {
   },
   async create(data = {}) {
     const payload = normalizeUserInput(data);
-    await query(
+    const result = await query(
       `
-        insert into users (
+        insert into public.users (
           id, username, full_name, email, mobile, avatar, password_hash, role, refresh_token
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        returning
+          id as "_id",
+          id,
+          username,
+          full_name as "fullName",
+          email,
+          mobile,
+          avatar,
+          password_hash as "passwordHash",
+          role,
+          refresh_token as "refreshToken",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
       `,
       [
         payload.id,
@@ -338,7 +342,7 @@ export const User = {
       ]
     );
 
-    const created = hydrateUser(await fetchUserById(payload.id));
+    const created = hydrateUser(result.rows[0] || null);
     if (created && data.favorites) {
       created.favorites = await syncFavorites(created._id, data.favorites);
     } else if (created) {
@@ -357,34 +361,38 @@ export const User = {
     return deleteUsers(filter);
   },
   async findByIdAndDelete(id) {
-    const existing = await fetchUserById(id);
-    if (!existing) {
-      return null;
-    }
-
-    await query(`delete from user_favorites where user_id = ?`, [id]);
-    await query(`delete from users where id = ?`, [id]);
-    return { _id: existing._id };
+    await query(`delete from public.user_favorites where user_id = $1`, [id]);
+    const result = await query(`delete from public.users where id = $1 returning id as "_id"`, [id]);
+    return result.rows[0] ? { _id: result.rows[0]._id } : null;
   },
   async updateRefreshToken(id, refreshToken) {
     const result = await query(
       `
-        update users
-        set refresh_token = ?,
-            updated_at = utc_timestamp()
-        where id = ?
+        update public.users
+        set refresh_token = $2,
+            updated_at = timezone('utc', now())
+        where id = $1
+        returning
+          id as "_id",
+          id,
+          username,
+          full_name as "fullName",
+          email,
+          mobile,
+          avatar,
+          password_hash as "passwordHash",
+          role,
+          refresh_token as "refreshToken",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
       `,
-      [refreshToken, id]
+      [id, refreshToken]
     );
 
-    if (result.rowCount === 0) {
-      return null;
-    }
-
-    return hydrateUser(await fetchUserById(id));
+    return hydrateUser(result.rows[0] || null);
   },
   clearRefreshTokenByToken(refreshToken) {
-    return query(`update users set refresh_token = null, updated_at = utc_timestamp() where refresh_token = ?`, [refreshToken]);
+    return query(`update public.users set refresh_token = null, updated_at = timezone('utc', now()) where refresh_token = $1`, [refreshToken]);
   },
   async getFavorites(userId) {
     const user = await fetchUserById(userId);
