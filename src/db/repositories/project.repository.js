@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import slugify from "slugify";
 import { query } from "../../config/db.js";
-import { buildPredicate, createQuery } from "./_sql.js";
+import { buildPredicate, createQuery, parseJsonField, stringifyJson } from "./_sql.js";
 
 const PROJECT_COLUMNS = {
   _id: "p.id",
@@ -80,17 +80,17 @@ function mapProject(row) {
 
   return {
     ...row,
-    images: row.images || [],
-    overview: row.overview || {},
-    amenities: row.amenities || [],
-    faqs: row.faqs || [],
+    images: parseJsonField(row.images, []),
+    overview: parseJsonField(row.overview, {}),
+    amenities: parseJsonField(row.amenities, []),
+    faqs: parseJsonField(row.faqs, []),
   };
 }
 
 async function fetchProjects(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, PROJECT_COLUMNS, params);
-  const { rows } = await query(`select ${PROJECT_SELECT} from public.projects p ${where ? `where ${where}` : ""}`, params);
+  const { rows } = await query(`select ${PROJECT_SELECT} from projects p ${where ? `where ${where}` : ""}`, params);
   return rows.map(mapProject);
 }
 
@@ -197,11 +197,11 @@ function normalizeUpdatePayload(data = {}) {
 async function updateProject(id, payload = {}) {
   const update = normalizeUpdatePayload(payload);
   const fields = [];
-  const values = [id];
+  const values = [];
 
   for (const [field, value] of Object.entries(update)) {
-    values.push(value);
-    fields.push(`${field} = $${values.length}`);
+    fields.push(`${field} = ?`);
+    values.push(["images", "overview", "amenities", "faqs"].includes(field) ? stringifyJson(value, Array.isArray(value) ? [] : {}) : value);
   }
 
   if (fields.length === 0) {
@@ -210,15 +210,18 @@ async function updateProject(id, payload = {}) {
 
   const result = await query(
     `
-      update public.projects
-      set ${fields.join(", ")}, updated_at = timezone('utc', now())
-      where id = $1
-      returning ${PROJECT_SELECT}
+      update projects
+      set ${fields.join(", ")}, updated_at = utc_timestamp()
+      where id = ?
     `,
-    values
+    [...values, id]
   );
 
-  return mapProject(result.rows[0] || null);
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return fetchProjectById(id);
 }
 
 export const Project = {
@@ -238,16 +241,23 @@ export const Project = {
     return createQuery(async () => fetchProjectBySlug(slug));
   },
   async create(data = {}) {
+    if (Array.isArray(data)) {
+      const created = [];
+      for (const item of data) {
+        created.push(await Project.create(item));
+      }
+      return created;
+    }
+
     const payload = normalizeProjectCreate(data);
-    const result = await query(
+    await query(
       `
-        insert into public.projects (
+        insert into projects (
           id, title, slug, description, status, location, address, project_type, developed_by,
           images, brochure_url, overview, amenities, location_description,
           virtual_tour_url, virtual_tour_title, virtual_tour_description, faqs,
           contact_title, contact_note, contact_button_label
-        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-        returning ${PROJECT_SELECT}
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         payload.id,
@@ -259,34 +269,39 @@ export const Project = {
         payload.address,
         payload.project_type,
         payload.developed_by,
-        payload.images,
+        stringifyJson(payload.images, []),
         payload.brochure_url,
-        payload.overview,
-        payload.amenities,
+        stringifyJson(payload.overview, {}),
+        stringifyJson(payload.amenities, []),
         payload.location_description,
         payload.virtual_tour_url,
         payload.virtual_tour_title,
         payload.virtual_tour_description,
-        payload.faqs,
+        stringifyJson(payload.faqs, []),
         payload.contact_title,
         payload.contact_note,
         payload.contact_button_label,
       ]
     );
 
-    return mapProject(result.rows[0] || null);
+    return fetchProjectById(payload.id);
   },
   findByIdAndUpdate(id, payload = {}) {
     return updateProject(id, payload);
   },
   async findByIdAndDelete(id) {
-    const result = await query(`delete from public.projects where id = $1 returning id as "_id"`, [id]);
-    return result.rows[0] ? { _id: result.rows[0]._id } : null;
+    const existing = await fetchProjectById(id);
+    if (!existing) {
+      return null;
+    }
+
+    await query(`delete from projects where id = ?`, [id]);
+    return { _id: existing._id };
   },
   async deleteMany(filter = {}) {
     const params = [];
     const where = buildPredicate(filter, PROJECT_COLUMNS, params);
-    const result = await query(`delete from public.projects ${where ? `where ${where}` : ""}`, params);
+    const result = await query(`delete from projects ${where ? `where ${where}` : ""}`, params);
     return { deletedCount: result.rowCount };
   },
 };

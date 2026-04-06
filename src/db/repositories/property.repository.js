@@ -1,5 +1,5 @@
 import { query } from "../../config/db.js";
-import { buildPredicate, createQuery } from "./_sql.js";
+import { buildPredicate, createQuery, parseJsonField, stringifyJson } from "./_sql.js";
 import { randomUUID } from "crypto";
 
 const PROPERTY_COLUMNS = {
@@ -83,6 +83,7 @@ function mapProperty(row) {
 
   return {
     ...row,
+    images: parseJsonField(row.images, []),
     agent: row.agent ?? null,
   };
 }
@@ -90,7 +91,7 @@ function mapProperty(row) {
 async function fetchProperties(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, PROPERTY_COLUMNS, params);
-  const { rows } = await query(`select ${PROPERTY_SELECT} from public.properties p ${where ? `where ${where}` : ""}`, params);
+  const { rows } = await query(`select ${PROPERTY_SELECT} from properties p ${where ? `where ${where}` : ""}`, params);
   return rows.map(mapProperty);
 }
 
@@ -144,10 +145,10 @@ async function populateProperties(records, populateSpecs) {
     const agentRows = await query(
       `
         select ${USER_SELECT}
-        from public.users u
-        where u.id = any($1)
+        from users u
+        where u.id in (${agentIds.map(() => "?").join(", ")})
       `,
-      [agentIds]
+      agentIds
     );
 
     const agentMap = new Map(agentRows.rows.map((row) => [row._id, row]));
@@ -171,7 +172,7 @@ async function populateProperties(records, populateSpecs) {
 async function deleteProperties(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, PROPERTY_COLUMNS, params);
-  const result = await query(`delete from public.properties ${where ? `where ${where}` : ""}`, params);
+  const result = await query(`delete from properties ${where ? `where ${where}` : ""}`, params);
   return { deletedCount: result.rowCount };
 }
 
@@ -179,27 +180,25 @@ async function updateProperty(id, payload = {}) {
   const data = normalizePropertyInput(payload);
   const result = await query(
     `
-      update public.properties
-      set title = $2,
-          description = $3,
-          transaction_type = $4,
-          property_type = $5,
-          category = $6,
-          sub_category = $7,
-          location = $8,
-          address = $9,
-          price = $10,
-          sqt = $11,
-          bedrooms = $12,
-          bathrooms = $13,
-          images = $14,
-          agent_id = $15,
-          updated_at = timezone('utc', now())
-      where id = $1
-      returning ${PROPERTY_SELECT}
+      update properties
+      set title = ?,
+          description = ?,
+          transaction_type = ?,
+          property_type = ?,
+          category = ?,
+          sub_category = ?,
+          location = ?,
+          address = ?,
+          price = ?,
+          sqt = ?,
+          bedrooms = ?,
+          bathrooms = ?,
+          images = ?,
+          agent_id = ?,
+          updated_at = utc_timestamp()
+      where id = ?
     `,
     [
-      id,
       data.title,
       data.description,
       data.transaction_type,
@@ -212,12 +211,17 @@ async function updateProperty(id, payload = {}) {
       data.sqt,
       data.bedrooms,
       data.bathrooms,
-      data.images,
+      stringifyJson(data.images, []),
       data.agent_id,
+      id,
     ]
   );
 
-  return mapProperty(result.rows[0] || null);
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return fetchPropertyById(id);
 }
 
 export const Property = {
@@ -235,13 +239,12 @@ export const Property = {
   },
   async create(data = {}) {
     const payload = normalizePropertyInput(data);
-    const result = await query(
+    await query(
       `
-        insert into public.properties (
+        insert into properties (
           id, title, description, transaction_type, property_type, category, sub_category,
           location, address, price, sqt, bedrooms, bathrooms, images, agent_id
-        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-        returning ${PROPERTY_SELECT}
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         payload.id,
@@ -257,19 +260,24 @@ export const Property = {
         payload.sqt,
         payload.bedrooms,
         payload.bathrooms,
-        payload.images,
+        stringifyJson(payload.images, []),
         payload.agent_id,
       ]
     );
 
-    return mapProperty(result.rows[0] || null);
+    return fetchPropertyById(payload.id);
   },
   findByIdAndUpdate(id, payload = {}) {
     return updateProperty(id, payload);
   },
   async findByIdAndDelete(id) {
-    const result = await query(`delete from public.properties where id = $1 returning id as "_id"`, [id]);
-    return result.rows[0] ? { _id: result.rows[0]._id } : null;
+    const existing = await fetchPropertyById(id);
+    if (!existing) {
+      return null;
+    }
+
+    await query(`delete from properties where id = ?`, [id]);
+    return { _id: existing._id };
   },
   deleteMany(filter = {}) {
     return deleteProperties(filter);

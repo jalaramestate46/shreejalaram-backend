@@ -1,5 +1,5 @@
 import { query } from "../../config/db.js";
-import { buildPredicate, createQuery } from "./_sql.js";
+import { buildPredicate, createQuery, parseJsonField, stringifyJson } from "./_sql.js";
 
 const CONTENT_COLUMNS = {
   key: "c.key",
@@ -17,8 +17,11 @@ const CONTENT_SELECT = `
 async function fetchContent(filter = {}) {
   const params = [];
   const where = buildPredicate(filter, CONTENT_COLUMNS, params);
-  const { rows } = await query(`select ${CONTENT_SELECT} from public.content c ${where ? `where ${where}` : ""}`, params);
-  return rows;
+  const { rows } = await query(`select ${CONTENT_SELECT} from content c ${where ? `where ${where}` : ""}`, params);
+  return rows.map((row) => ({
+    ...row,
+    payload: parseJsonField(row.payload, {}),
+  }));
 }
 
 function extractPayload(update = {}) {
@@ -62,15 +65,15 @@ export const Content = {
 
         const inserted = await query(
           `
-            insert into public.content (key, payload)
-            values ($1, $2)
-            on conflict (key) do update set payload = excluded.payload, updated_at = timezone('utc', now())
-            returning ${CONTENT_SELECT}
+            insert into content (\`key\`, payload)
+            values (?, ?)
+            on duplicate key update payload = values(payload), updated_at = utc_timestamp()
           `,
-          [key, payload ?? null]
+          [key, stringifyJson(payload, null)]
         );
 
-        return inserted.rows[0] || null;
+        const rows = await fetchContent({ key });
+        return rows[0] || null;
       }
 
       if (payload === undefined) {
@@ -79,22 +82,43 @@ export const Content = {
 
       const updated = await query(
         `
-          update public.content
-          set payload = $2,
-              updated_at = timezone('utc', now())
-          where key = $1
-          returning ${CONTENT_SELECT}
+          update content
+          set payload = ?,
+              updated_at = utc_timestamp()
+          where \`key\` = ?
         `,
-        [existing.key, payload]
+        [stringifyJson(payload, null), existing.key]
       );
 
-      return updated.rows[0] || existing;
+      if (updated.rowCount === 0) {
+        return existing;
+      }
+
+      const rows = await fetchContent({ key: existing.key });
+      return rows[0] || existing;
     });
   },
   async deleteMany(filter = {}) {
     const params = [];
     const where = buildPredicate(filter, CONTENT_COLUMNS, params);
-    const result = await query(`delete from public.content ${where ? `where ${where}` : ""}`, params);
+    const result = await query(`delete from content ${where ? `where ${where}` : ""}`, params);
     return { deletedCount: result.rowCount };
+  },
+  async create(data = {}) {
+    const items = Array.isArray(data) ? data : [data];
+
+    for (const item of items) {
+      await query(
+        `insert into content (\`key\`, payload) values (?, ?) on duplicate key update payload = values(payload), updated_at = utc_timestamp()`,
+        [item.key, stringifyJson(item.payload, {})]
+      );
+    }
+
+    if (Array.isArray(data)) {
+      return fetchContent({});
+    }
+
+    const rows = await fetchContent({ key: data.key });
+    return rows[0] || null;
   },
 };

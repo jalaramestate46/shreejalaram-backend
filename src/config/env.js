@@ -15,7 +15,7 @@ for (const envPath of envCandidates) {
   dotenv.config({ path: envPath, override: false });
 }
 
-const required = ["SUPABASE_DB_URL", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
+const required = ["MYSQL_URL", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
 
 // Check and warn about missing variables (but don't throw to allow Vercel env vars)
 for (const key of required) {
@@ -28,10 +28,10 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   isProd: process.env.NODE_ENV === "production",
   port: Number(process.env.PORT || 3000),
-  supabaseUrl: process.env.SUPABASE_URL || "",
-  supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  supabaseDbUrl: process.env.SUPABASE_DB_URL || "",
+  mysqlUrl:
+    process.env.MYSQL_URL
+    || process.env.DATABASE_URL
+    || "",
   frontendOrigin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
   siteUrl: process.env.SITE_URL || "https://jalaramestate.com",
   jwtAccessSecret: process.env.JWT_ACCESS_SECRET || "default-secret-key",

@@ -49,6 +49,10 @@ app.use((req, res, next) => {
   return next();
 });
 
+app.get("/admin/dashbroad", (_req, res) => {
+  return res.redirect(302, "/admin/dashboard");
+});
+
 // Ensure database is connected
 app.use(ensureDbConnected);
 
